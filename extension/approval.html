@@ -1,0 +1,44 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  :root { --bg:#0e1116; --panel:#161b22; --line:#232a34; --fg:#e6edf3; --muted:#8b949e; --green:#16a34a; --red:#f85149; }
+  * { box-sizing:border-box; }
+  body { width:380px; margin:0; font-family:-apple-system,Segoe UI,Roboto,sans-serif; background:var(--bg); color:var(--fg); }
+  header { padding:14px 16px; border-bottom:1px solid var(--line); display:flex; align-items:center; gap:8px; }
+  header .dot { width:18px; height:18px; border-radius:5px; background:var(--green); }
+  header h1 { font-size:14px; margin:0; font-weight:600; }
+  main { padding:16px; }
+  h2 { font-size:15px; margin:0 0 4px; }
+  .origin { font-size:12px; color:var(--muted); word-break:break-all; margin-bottom:14px; }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:12px; margin-bottom:12px; }
+  .row { display:flex; justify-content:space-between; gap:10px; font-size:12px; padding:4px 0; }
+  .row .k { color:var(--muted); } .row .v { text-align:right; word-break:break-all; font-family:ui-monospace,monospace; }
+  .addr { font-size:11px; word-break:break-all; color:var(--muted); font-family:ui-monospace,monospace; }
+  label { font-size:12px; color:var(--muted); }
+  input { width:100%; padding:9px 10px; border:1px solid var(--line); border-radius:8px; background:var(--panel); color:var(--fg); font-size:13px; margin-top:6px; }
+  button { width:100%; padding:11px; border:0; border-radius:8px; font-size:13px; font-weight:600; cursor:pointer; margin-top:8px; }
+  .approve { background:var(--green); color:#fff; } .reject { background:transparent; border:1px solid var(--line); color:var(--fg); }
+  .msg { font-size:12px; margin-top:10px; min-height:16px; color:var(--red); word-break:break-all; }
+  .warn { font-size:11px; color:var(--muted); margin-top:6px; line-height:1.5; }
+  .hidden { display:none; }
+</style>
+</head>
+<body>
+<header><div class="dot"></div><h1>Final Layer Wallet</h1></header>
+<main>
+  <h2 id="title">Request</h2>
+  <div class="origin" id="origin"></div>
+  <div id="detail"></div>
+  <div id="unlock-wrap" class="hidden">
+    <label>Password to approve</label>
+    <input id="pw" type="password" autocomplete="off">
+  </div>
+  <div id="msg" class="msg"></div>
+  <button id="approve" class="approve">Approve</button>
+  <button id="reject" class="reject">Reject</button>
+</main>
+<script type="module" src="approval.js"></script>
+</body>
+</html>

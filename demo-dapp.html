@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Final Layer dApp test</title>
+<style>
+  body { font-family: system-ui, sans-serif; background:#0b0f17; color:#e6edf3; max-width:720px; margin:30px auto; padding:0 16px; }
+  button { background:#22d3ee; border:0; border-radius:8px; padding:9px 14px; margin:4px 4px 4px 0; font-weight:600; cursor:pointer; }
+  pre { background:#111827; padding:12px; border-radius:8px; white-space:pre-wrap; word-break:break-all; font-size:12px; }
+  .pass { color:#4ade80 } .fail { color:#f87171 }
+</style>
+</head>
+<body>
+<h2>Final Layer Wallet: dApp test</h2>
+<p>Serve this page over http (content scripts do not run on file://), for example
+<code>python -m http.server 8080</code> in this folder, then open http://localhost:8080/demo-dapp.html.</p>
+<div>
+  <button id="connect">1. Connect (eth_requestAccounts)</button>
+  <button id="info">2. Chain + balance</button>
+  <button id="send">3. Send 0.001 FL to myself</button>
+  <button id="sign">4. personal_sign</button>
+</div>
+<pre id="log"></pre>
+<script>
+const log = (t, cls) => { const s = document.createElement('div'); if (cls) s.className = cls; s.textContent = t; document.getElementById('log').prepend(s); };
+const P = () => window.finalLayer;
+let account = null;
+window.addEventListener('eip6963:announceProvider', (e) => log('EIP-6963 announced: ' + e.detail.info.name + ' (' + e.detail.info.rdns + ')'));
+window.dispatchEvent(new Event('eip6963:requestProvider'));
+setTimeout(() => log(P() ? 'window.finalLayer found (isFinalLayer=' + P().isFinalLayer + ')' : 'window.finalLayer NOT found: load or reload the extension, then hard-reload this page', P() ? 'pass' : 'fail'), 300);
+P() && P().on('accountsChanged', (a) => log('event accountsChanged: ' + JSON.stringify(a)));
+document.getElementById('connect').onclick = async () => {
+  try { const a = await P().request({ method: 'eth_requestAccounts' }); account = a[0]; log('connected: ' + account, 'pass'); }
+  catch (e) { log('connect failed: ' + e.message + ' (code ' + e.code + ')', 'fail'); }
+};
+document.getElementById('info').onclick = async () => {
+  try {
+    const chain = await P().request({ method: 'eth_chainId' });
+    log('chainId ' + chain + (chain === '0x1352894' ? ' (Final Layer)' : ''), chain === '0x1352894' ? 'pass' : 'fail');
+    const accts = await P().request({ method: 'eth_accounts' }); account = accts[0] || account;
+    if (!account) return log('not connected yet');
+    const bal = BigInt(await P().request({ method: 'eth_getBalance', params: [account, 'latest'] }));
+    log('balance ' + (Number(bal) / 1e18) + ' FL', 'pass');
+  } catch (e) { log('info failed: ' + e.message, 'fail'); }
+};
+document.getElementById('send').onclick = async () => {
+  try {
+    const hash = await P().request({ method: 'eth_sendTransaction', params: [{ from: account, to: account, value: '0x38d7ea4c68000' }] });
+    log('sent, tx ' + hash + ' (waiting for receipt)', 'pass');
+    for (let i = 0; i < 20; i++) {
+      await new Promise((r) => setTimeout(r, 1500));
+      const r = await P().request({ method: 'eth_getTransactionReceipt', params: [hash] });
+      if (r) { log('mined in block ' + parseInt(r.blockNumber, 16) + ', status ' + r.status, r.status === '0x1' ? 'pass' : 'fail'); return; }
+    }
+    log('no receipt yet');
+  } catch (e) { log('send failed: ' + e.message + ' (code ' + e.code + ')', 'fail'); }
+};
+document.getElementById('sign').onclick = async () => {
+  try {
+    const sig = await P().request({ method: 'personal_sign', params: ['hello from a Final Layer dApp', account] });
+    log('personal_sign ML-DSA-87 signature, ' + ((sig.length - 2) / 2) + ' bytes', sig.length === 2 + 4627 * 2 ? 'pass' : 'fail');
+    const env = await P().request({ method: 'fl_signMessage', params: ['hello from a Final Layer dApp'] });
+    // verify on chain through the ML-DSA precompile (contract domain)
+    const input = '0x01' + env.digest.slice(2) + env.publicKey.slice(2) + env.signature.slice(2);
+    const out = await P().request({ method: 'eth_call', params: [{ to: '0x0000000000000000000000000000000000000f01', data: input }, 'latest'] });
+    log('on-chain verification via 0x0f01: ' + (BigInt(out) === 1n ? 'VALID' : 'INVALID'), BigInt(out) === 1n ? 'pass' : 'fail');
+  } catch (e) { log('sign failed: ' + e.message + ' (code ' + e.code + ')', 'fail'); }
+};
+</script>
+</body>
+</html>

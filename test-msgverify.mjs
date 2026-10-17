@@ -1,0 +1,10 @@
+import { readFileSync } from 'node:fs';
+import * as W from './src/wallet.mjs';
+const [rpc, keyPath] = process.argv.slice(2); W.configure({ rpc });
+const w = await W.unlock((await W.importPrivateKey(readFileSync(keyPath, 'utf8'), 'pw-12345678')).vault, 'pw-12345678');
+const s = W.signMessage(w, 'hello final layer');
+const input = '0x01' + s.digest.slice(2) + s.publicKey.slice(2) + s.signature.slice(2);
+const out = await W.rpc('eth_call', [{ to: '0x0000000000000000000000000000000000000f01', data: input }, 'latest']);
+console.log(BigInt(out) === 1n ? 'PASS message signature verifies on chain via 0x0f01' : 'FAIL 0x0f01 returned ' + out);
+const bad = '0x01' + s.digest.slice(2, -2) + '00' + s.publicKey.slice(2) + s.signature.slice(2);
+console.log(BigInt(await W.rpc('eth_call', [{ to: '0x0000000000000000000000000000000000000f01', data: bad }, 'latest'])) === 0n ? 'PASS altered message rejected' : 'FAIL');
