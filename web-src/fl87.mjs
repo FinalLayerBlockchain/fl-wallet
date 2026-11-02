@@ -4,7 +4,7 @@
 // Accounts: NIST FIPS 204 ML-DSA-87. address = last 20 bytes of
 // keccak256(scheme || publicKey), scheme 0x01. Transactions are type 0x07
 // (PQTx, see core/types/tx_pq.go in the node): EIP-1559 fields + From +
-// Scheme are signed (FIPS 204 context "FinalLayer/tx/v1"); the public key and
+// Scheme + FeeCurrency are signed (FIPS 204 context "FinalLayer/tx/v1"); the public key and
 // signature travel with the transaction.
 
 import { mnemonicToSeedSync, generateMnemonic, validateMnemonic } from '@scure/bip39';
@@ -162,7 +162,9 @@ function accessListItems(list = []) {
 // ---- PQ transactions ------------------------------------------------------------
 
 // tx: { chainId, nonce, maxPriorityFeePerGas, maxFeePerGas, gas, to (null = create),
-//       value, data (Uint8Array), accessList, from, scheme }
+//       value, data (Uint8Array), accessList, from, scheme, feeCurrency }
+// feeCurrency (optional): a token listed in the fee currency directory that
+// pays for gas; gas prices stay in FL wei. Empty (null) = gas paid in FL.
 function signedFields(tx) {
   return [
     uintBytes(tx.chainId),
@@ -176,6 +178,7 @@ function signedFields(tx) {
     accessListItems(tx.accessList),
     addrBytes(tx.from),
     uintBytes(tx.scheme ?? SCHEME_MLDSA87),
+    tx.feeCurrency ? addrBytes(tx.feeCurrency) : new Uint8Array(0),
   ];
 }
 

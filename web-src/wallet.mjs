@@ -126,9 +126,15 @@ export async function getFees() {
 }
 
 // Gas for a call: the node's estimate (which cannot include the post-quantum
-// authorization because it has no public key) + 20% + the PQ auth gas.
-export async function estimateGas({ from, to, value = 0n, data = '0x' }) {
+// authorization because it has no public key) + 20% + the PQ auth gas. With a
+// fee currency the node's estimate includes that token's extra intrinsic gas.
+export async function estimateGas({ from, to, value = 0n, data = '0x', feeCurrency = null }) {
   if (!to && (!data || data === '0x')) throw new Error('nothing to send');
+  if (feeCurrency) {
+    const arg = { from, to: to || undefined, value: '0x' + BigInt(value).toString(16), data, feeCurrency: parseAddress(feeCurrency) };
+    const est = BigInt(await rpc('eth_estimateGas', [arg]));
+    return est + est / 5n + AUTH_GAS;
+  }
   if (to && (!data || data === '0x')) {
     const code = await rpc('eth_getCode', [to, 'latest']);
     if (!code || code === '0x') return 21000n + AUTH_GAS; // plain transfer
@@ -143,21 +149,63 @@ export async function transferFee() {
   return { fee: formatFL((21000n + AUTH_GAS) * f.maxFeePerGas), gas: 21000n + AUTH_GAS, ...f };
 }
 
+// ---- fee currencies (gas paid in a listed ERC-20) ---------------------------------
+// The directory is a governance-owned contract in genesis. Gas prices stay in
+// FL; the node charges the token at the directory's rate:
+//   tokenAmount = ceil(flWei * numerator / denominator)
+export const FEE_DIRECTORY = '0x0000000000000000000000000000000000005052';
+const FEE_SEL = { getCurrencies: '0x61c661de', getCurrencyConfigAndRate: '0xe7295be5' };
+
+export function flToToken(flWei, cur) {
+  const n = BigInt(flWei) * cur.numerator;
+  return (n + cur.denominator - 1n) / cur.denominator;
+}
+
+// Listed fee currencies with token info, rate, intrinsic gas and (if owner is
+// given) the owner's balance. Tokens whose price source fails are left out.
+export async function getFeeCurrencies(owner) {
+  const r = String(await ethCall(FEE_DIRECTORY, FEE_SEL.getCurrencies) || '0x').replace(/^0x/, '');
+  if (r.length < 128) return [];
+  const n = Number(BigInt('0x' + r.slice(64, 128)));
+  const out = [];
+  for (let i = 0; i < n && i < 32; i++) {
+    const addr = toChecksumAddress('0x' + r.slice(128 + 64 * i + 24, 128 + 64 * (i + 1)));
+    try {
+      const c = String(await ethCall(FEE_DIRECTORY, callData(FEE_SEL.getCurrencyConfigAndRate, addr))).replace(/^0x/, '');
+      const info = await getTokenInfo(addr);
+      if (!info || c.length < 192) continue;
+      const cur = { ...info, numerator: BigInt('0x' + c.slice(0, 64)), denominator: BigInt('0x' + c.slice(64, 128)), intrinsicGas: BigInt('0x' + c.slice(128, 192)) };
+      if (owner) cur.balance = await getTokenBalance(addr, owner);
+      out.push(cur);
+    } catch { /* not usable right now (e.g. price expired) */ }
+  }
+  return out;
+}
+
+// Max fee of a transfer paid in `cur` (a getFeeCurrencies entry), in token units.
+export async function transferFeeIn(cur) {
+  const f = await getFees();
+  const gas = 21000n + cur.intrinsicGas + AUTH_GAS;
+  const raw = flToToken(gas * f.maxFeePerGas, cur);
+  return { raw, fee: formatUnits(raw, cur.decimals), gas, ...f };
+}
+
 // ---- sending --------------------------------------------------------------------
 // Build, sign (ML-DSA-87, context FinalLayer/tx/v1) and broadcast. `from` is the
 // account address; it equals wallet.address unless the account rotated its key.
-export async function sendTx(wallet, { to = null, value = 0n, data = '0x', gas, from, nonce, maxFeePerGas, maxPriorityFeePerGas, broadcast = true } = {}) {
+export async function sendTx(wallet, { to = null, value = 0n, data = '0x', gas, from, nonce, maxFeePerGas, maxPriorityFeePerGas, feeCurrency = null, broadcast = true } = {}) {
   const sender = from ? parseAddress(from) : wallet.address;
   const recipient = to ? parseAddress(to) : null;
   const dataBytes = hexToBytes(String(data || '0x').replace(/^0x/, ''));
   const fees = (maxFeePerGas != null && maxPriorityFeePerGas != null) ? { maxFeePerGas: BigInt(maxFeePerGas), maxPriorityFeePerGas: BigInt(maxPriorityFeePerGas) } : await getFees();
-  const g = gas != null ? BigInt(gas) : await estimateGas({ from: sender, to: recipient, value, data });
+  const fc = feeCurrency ? parseAddress(feeCurrency) : null;
+  const g = gas != null ? BigInt(gas) : await estimateGas({ from: sender, to: recipient, value, data, feeCurrency: fc });
   const n = nonce !== undefined ? BigInt(nonce) : BigInt(await rpc('eth_getTransactionCount', [sender, 'pending']));
   const tx = {
     chainId: CHAIN_ID, nonce: n,
     maxPriorityFeePerGas: fees.maxPriorityFeePerGas, maxFeePerGas: fees.maxFeePerGas,
     gas: g, to: recipient, value: BigInt(value), data: dataBytes, accessList: [],
-    from: sender, scheme: SCHEME_MLDSA87,
+    from: sender, scheme: SCHEME_MLDSA87, feeCurrency: fc,
   };
   const { raw, hash } = signPQTx(tx, wallet);
   if (!broadcast) return { raw, hash, nonce: n, gas: g, maxFeePerGas: fees.maxFeePerGas };
@@ -165,8 +213,8 @@ export async function sendTx(wallet, { to = null, value = 0n, data = '0x', gas, 
   return { hash: sent || hash, nonce: n, gas: g, maxFeePerGas: fees.maxFeePerGas };
 }
 
-export async function send(wallet, toAddress, amountFL) {
-  return sendTx(wallet, { to: parseAddress(toAddress), value: parseUnits(amountFL, 18) });
+export async function send(wallet, toAddress, amountFL, { feeCurrency = null } = {}) {
+  return sendTx(wallet, { to: parseAddress(toAddress), value: parseUnits(amountFL, 18), feeCurrency });
 }
 
 export async function waitForReceipt(hash, timeoutMs = 60000) {
@@ -208,9 +256,9 @@ export async function getTokenBalance(contract, owner) {
   return BigInt(r && r !== '0x' ? r : '0x0');
 }
 
-export async function sendToken(wallet, contract, to, amountRaw) {
+export async function sendToken(wallet, contract, to, amountRaw, { feeCurrency = null } = {}) {
   const data = callData(SEL.transfer, parseAddress(to), BigInt(amountRaw).toString(16));
-  return sendTx(wallet, { to: parseAddress(contract), value: 0n, data });
+  return sendTx(wallet, { to: parseAddress(contract), value: 0n, data, feeCurrency });
 }
 
 // ---- history (explorer index) ---------------------------------------------------

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Final Layer Wallet",
-  "version": "0.3.2",
+  "version": "0.4.0",
   "description": "Non-custodial post-quantum (ML-DSA-87) wallet for the Final Layer blockchain.",
   "action": {
     "default_popup": "popup.html",

@@ -1,6 +1,6 @@
 # Final Layer wallet (fl-wallet)
 
-Browser extension (Manifest V3, v0.3.2) and web wallet for Final Layer, the post-quantum EVM
+Browser extension (Manifest V3, v0.4.0) and web wallet for Final Layer, the post-quantum EVM
 Layer 1 (chain ID `20261012`) built on the [BNB Smart Chain client](https://github.com/bnb-chain/bsc).
 Accounts are ML-DSA-87 (FIPS 204) keys; transactions are Final Layer PQ transactions (type `0x07`).
 

@@ -221,6 +221,9 @@
     <label>Amount</label>
     <input id="tksend-amt" type="text" inputmode="decimal" placeholder="0.0">
     <input id="tksend-fee" type="hidden" value="0">
+    <label>Pay network fee with</label>
+    <select id="tksend-feecur"><option value="">FL</option></select>
+    <div id="tksend-detail" class="sub" style="margin-top:8px"></div>
     <div id="tksend-pin-wrap" class="hidden"><label>PIN</label><input id="tksend-pin" type="password" inputmode="numeric" autocomplete="off"></div>
     <button id="btn-tokenSend">Send</button>
     <div id="tksend-msg" class="msg"></div>
@@ -233,6 +236,8 @@
     <input id="send-to" placeholder="0x...">
     <label>Amount (FL)</label>
     <input id="send-amt" type="text" inputmode="decimal" placeholder="0.0">
+    <label>Pay network fee with</label>
+    <select id="send-feecur"><option value="">FL</option></select>
     <div id="send-pin-wrap" class="hidden">
       <label>PIN</label>
       <input id="send-pin" type="password" inputmode="numeric" autocomplete="off">
